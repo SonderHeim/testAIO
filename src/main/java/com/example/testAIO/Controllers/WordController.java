@@ -9,11 +9,24 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.awt.Font;
 import org.apache.poi.xwpf.usermodel.XWPFStyle;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.file.Files;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 @RestController
 public class WordController {
@@ -64,4 +77,121 @@ public class WordController {
                 .headers(headers)
                 .body(outputStream.toByteArray());
     }
+    @GetMapping("/generate-word")
+    public ResponseEntity<byte[]> generateWord() throws IOException {
+
+        // Создание документа Word
+        XWPFDocument document = new XWPFDocument();
+
+        // Создание таблицы
+        XWPFTable table = document.createTable();
+
+        // Создание заголовка таблицы
+        XWPFTableRow header = table.getRow(0);
+        header.getCell(0).setText("Имя");
+        header.createCell().setText("Фамилия");
+        header.createCell().setText("Возраст");
+
+        // Создание списка объектов Person
+        List<Person> personList = createPersonList();
+
+        // Заполнение таблицы данными из списка
+        for (Person person : personList) {
+            XWPFTableRow row = table.createRow();
+            row.getCell(0).setText(person.getFirstName());
+            row.getCell(1).setText(person.getLastName());
+            row.getCell(2).setText(Integer.toString(person.getAge()));
+        }
+
+        XWPFParagraph firstPar = document.createParagraph();
+        firstPar.setSpacingBefore(0);
+        XWPFRun firstRun = firstPar.createRun();
+        firstPar.setIndentationFirstLine(200); // устанавливаем отступ первой строки в 1 см
+        firstRun.setText("${title}");
+
+        // Замена меток в документе на значения
+        Map<String, String> replaceMap = new HashMap<>();
+        replaceMap.put("${title}", "Список людей");
+        replaceMap.put("${date}", LocalDate.now().toString());
+        replaceInDocument(document, replaceMap);
+
+        // Сохранение документа в файл
+        File file = new File("persons.docx");
+        FileOutputStream fos = new FileOutputStream(file);
+        document.write(fos);
+
+        // Отправка документа в ответе на запрос
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDispositionFormData("attachment", "persons.docx");
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+    }
+    private void replaceInDocument(XWPFDocument document, Map<String, String> replaceMap) {
+        for (XWPFParagraph p : document.getParagraphs()) {
+            List<XWPFRun> runs = p.getRuns();
+            if (runs != null) {
+                for (XWPFRun r : runs) {
+                    String text = r.getText(0);
+                    if (text != null) {
+                        for (Map.Entry<String, String> entry : replaceMap.entrySet()) {
+                            if (text.contains(entry.getKey())) {
+                                text = text.replace(entry.getKey(), entry.getValue());
+                                r.setText(text, 0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    public class Person {
+        private String firstName;
+        private String lastName;
+        private int age;
+
+        public Person(String firstName, String lastName, int age) {
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.age = age;
+        }
+
+        public String getFirstName() {
+            return firstName;
+        }
+
+        public void setFirstName(String firstName) {
+            this.firstName = firstName;
+        }
+
+        public String getLastName() {
+            return lastName;
+        }
+
+        public void setLastName(String lastName) {
+            this.lastName = lastName;
+        }
+
+        public int getAge() {
+            return age;
+        }
+
+        public void setAge(int age) {
+            this.age = age;
+        }
+    }
+
+    public List<Person> createPersonList() {
+        List<Person> personList = new ArrayList<>();
+        personList.add(new Person("John", "Doe", 30));
+        personList.add(new Person("Jane", "Smith", 25));
+        personList.add(new Person("Bob", "Johnson", 40));
+        return personList;
+    }
+
+
+
 }
